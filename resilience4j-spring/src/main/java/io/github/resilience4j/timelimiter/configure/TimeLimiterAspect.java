@@ -111,12 +111,11 @@ public class TimeLimiterAspect implements Ordered, AutoCloseable {
             }
         }
 
-        if (!CompletionStage.class.isAssignableFrom(returnType)) {
-            throw new IllegalReturnTypeException(returnType, methodName,
-                "CompletionStage expected.");
+        if (CompletionStage.class.isAssignableFrom(returnType)) {
+            return handleJoinPointCompletableFuture(proceedingJoinPoint, timeLimiter);
         }
 
-        return handleJoinPointCompletableFuture(proceedingJoinPoint, timeLimiter);
+        return defaultHandling(proceedingJoinPoint, timeLimiter);
     }
 
     private io.github.resilience4j.timelimiter.TimeLimiter getOrCreateTimeLimiter(String methodName, String name) {
@@ -142,7 +141,9 @@ public class TimeLimiterAspect implements Ordered, AutoCloseable {
             return AnnotationExtractor.extract(proceedingJoinPoint.getTarget().getClass(), TimeLimiter.class);
         }
     }
-
+    
+    
+    
     private Object handleJoinPointCompletableFuture(
             ProceedingJoinPoint proceedingJoinPoint, io.github.resilience4j.timelimiter.TimeLimiter timeLimiter) throws Throwable {
         return timeLimiter.executeCompletionStage(timeLimiterExecutorService, () -> {
@@ -152,6 +153,30 @@ public class TimeLimiterAspect implements Ordered, AutoCloseable {
                 throw new CompletionException(throwable);
             }
         });
+    }
+    
+    private Object defaultHandling(
+            ProceedingJoinPoint proceedingJoinPoint, io.github.resilience4j.timelimiter.TimeLimiter timeLimiter) throws Throwable {
+       try {
+    	   return handleJoinPoint(proceedingJoinPoint,timeLimiter);
+       } catch (ExecutionException e) {
+    	   if(e.getCause() != null) {
+    		   throw e.getCause();
+    	   }else {
+    		   throw e;
+    	   }
+       }
+    }
+    
+    private Object handleJoinPoint(
+            ProceedingJoinPoint proceedingJoinPoint, io.github.resilience4j.timelimiter.TimeLimiter timeLimiter) throws Throwable {
+        return timeLimiter.executeCompletionStage(timeLimiterExecutorService, () -> CompletableFuture.supplyAsync(() -> {
+            try {
+                return proceedingJoinPoint.proceed();
+            } catch (Throwable throwable) {
+                throw new CompletionException(throwable);
+            }
+        })).toCompletableFuture().get();
     }
 
     @Override

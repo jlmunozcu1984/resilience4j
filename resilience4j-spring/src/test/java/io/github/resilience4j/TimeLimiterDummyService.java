@@ -12,9 +12,9 @@ import java.util.concurrent.CompletionStage;
 public class TimeLimiterDummyService implements TestDummyService {
 
     @Override
-    public String sync() {
-        //no-op
-        return null;
+    @TimeLimiter(name = BACKEND, fallbackMethod = "recovery")
+    public String sync() {       
+        return syncError();
     }
 
     @Override
@@ -82,4 +82,15 @@ public class TimeLimiterDummyService implements TestDummyService {
     public Mono<String> spelMono(String backend) {
         return monoError(backend);
     }
+
+	@TimeLimiter(name = BACKEND)
+	public String sync(long sleep) {
+		try {
+			if(sleep > 0) Thread.sleep(sleep);
+			return "test";
+		} catch (Exception e) {
+			throw new RuntimeException( e);
+		}
+	}
+	
 }
